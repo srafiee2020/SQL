@@ -1,0 +1,167 @@
+create database tutorial;
+use tutorial;
+
+select count(iso_code) from coviddeathsn;
+
+
+select * from coviddeathsn
+order by 3,4; 
+
+
+select * from covidvaccination
+order by 3,4; 
+
+####   select data that we are going to be using
+# Always check the data type before sorting based on a column or grouping 
+select location, STR_TO_DATE(date, '%m/%d/%Y') date, total_cases, new_cases, total_deaths, population
+from tutorial.coviddeathsn
+order by location asc, date asc;
+
+# Total cases vs total deaths
+# shows the liklihood of dying if you contract covid ar your country
+select location, STR_TO_DATE(date, '%m/%d/%Y') date, total_cases, total_deaths, (total_deaths/total_cases)*100 DeathPercentage
+from tutorial.coviddeathsn
+where location = "United States"  # or location like "United States"
+order by 1 desc, 2 desc;
+
+# Total cases vs population
+# What percentage of population got covid
+select location, STR_TO_DATE(date, '%m/%d/%Y') date, total_cases, population, (total_cases/population)*100 InfectedPercentage
+from tutorial.coviddeathsn
+where location like 'United States'  
+order by 1, 2 desc;
+
+# Looking at countries with highest infection rate compared to population
+select location, population, max(total_cases) as highest_infectioncount, max((total_cases/population)*100) highestInfectedPercentage
+from tutorial.coviddeathsn
+group by location, population
+order by highestInfectedPercentage desc;
+
+# Iran info
+select * from tutorial.coviddeathsn where location like "Iran";
+
+# Showing the countries with the highest death counts per population
+select location, max(cast(total_deaths as unsigned int)) as highest_deathcount, max((total_deaths/population)*100) highestDeathPercentage
+from tutorial.coviddeathsn
+where continent is not null
+group by location
+order by highestDeathPercentage desc;
+
+
+select * from tutorial.Coviddeathsn where continent is not null;
+
+#######################################################################################
+## Lets break things down by continent
+select * from tutorial.Coviddeathsn where continent ="";
+
+select continent, max(cast(total_deaths as unsigned int)) as highest_deathcount, max((total_deaths/population)*100) highestDeathPercentage
+from tutorial.coviddeathsn
+where continent != ""
+group by continent
+order by highestDeathPercentage desc;
+
+select location, max(cast(total_deaths as unsigned int)) as highest_deathcount, max((total_deaths/population)*100) highestDeathPercentage
+from tutorial.coviddeathsn
+where continent = ""
+group by location
+order by highestDeathPercentage desc;
+
+#########################################################################################
+# Global info
+select date, sum(cast(total_deaths as unsigned int)) as sum_deathcount, sum((total_deaths/population)*100) sumDeathPercentage
+from tutorial.coviddeathsn
+where continent != ""
+group by date
+order by sumDeathPercentage desc;
+
+select sum(total_deaths) as sum_deathcount, sum(total_cases) sumCases
+from tutorial.coviddeathsn;
+#where continent != "";
+
+select location, sum(total_cases), sum(total_deaths) from tutorial.Coviddeathsn
+where continent != ""
+group by location;
+
+select location, total_cases, total_deaths 
+from tutorial.Coviddeathsn
+where location like "Iran";
+
+# Joining the tables on location columns
+select dea.population from tutorial.coviddeathsn dea
+join tutorial.covidvaccination vac
+on dea.location = vac.location
+and dea.date = vac.date;
+
+select dea.location, max(dea.total_cases), max(dea.total_deaths), max(vac.total_tests)
+from coviddeathsn dea, covidvaccination vac
+where dea.location = vac.location and dea.date=vac.date #and dea.location="United States"
+group by dea.location
+order by dea.location;
+
+select dea.continent, dea.location, dea.date, dea.total_cases, dea.total_deaths, vac.total_tests
+from coviddeathsn dea
+join covidvaccination vac
+on dea.location = vac.location and dea.date = vac.date #and dea.location="United States"
+#group by dea.location
+where dea.continent !=""
+order by dea.location;
+
+# Looking for total population vs vaccinations 
+select dea.continent, dea.location, STR_TO_DATE(dea.date, '%m/%d/%Y') date, dea.population, vac.new_vaccinations
+,sum(convert(vac.new_vaccinations, unsigned)) over (partition by dea.location order by dea.location, STR_TO_DATE(dea.date, '%m/%d/%Y')) new_vaccination_sum_over_location # this partition with start over the sum function based on the location
+from coviddeathsn dea
+join covidvaccination vac
+on dea.location = vac.location and dea.date = vac.date
+where dea.continent !=""
+order by 2, 3;
+
+##########################################################################################################
+##########################################################################################################
+#                         				CREATING CTE and Temp Table
+# Let say we want to use the collomn we created in previous query to find the ratio of vaccinated people
+# we have two options: 1) temporary table or 2) CTE
+
+# 2) CTE is Common Table Expression is to manipulate complex subqueries data; it very much acts as a subquery
+with PopvsVac (continent, location, date, population, new_vaccinations, new_vaccination_sum_over_location)
+as
+(
+select dea.continent, dea.location, STR_TO_DATE(dea.date, '%m/%d/%Y') date, dea.population, vac.new_vaccinations
+,sum(convert(vac.new_vaccinations, unsigned)) over (partition by dea.location order by dea.location, STR_TO_DATE(dea.date, '%m/%d/%Y')) as new_vaccination_sum_over_location # this partition with start over the sum function based on the location
+#, new_vaccination_sum_over_location
+from coviddeathsn dea
+join covidvaccination vac
+on dea.location = vac.location and dea.date = vac.date
+where dea.continent !=""
+order by 2, 3
+)
+# The following commands shall be ran with the CTE
+select *,  new_vaccination_sum_over_location / population from PopvsVac;
+
+# Creating TEMP Table
+
+drop table if exists PercentPopulationVaccinated;
+create Table PercentPopulationVaccinated 
+(continent varchar(255), location varchar(255), Date date, population bigint, new_vaccinations varchar(255), new_vaccination_sum_over_location bigint);
+insert into PercentPopulationVaccinated
+select dea.continent, dea.location, STR_TO_DATE(dea.date, '%m/%d/%Y') date,  dea.population, vac.new_vaccinations
+,sum(new_vaccinations) over (partition by dea.location order by dea.location, STR_TO_DATE(dea.date, '%m/%d/%Y')) as new_vaccination_sum_over_location # this partition with start over the sum function based on the location
+from coviddeathsn dea
+join covidvaccination vac
+on dea.location = vac.location and dea.date = vac.date
+where dea.continent !=""
+order by 2, 3;
+
+select *, new_vaccination_sum_over_location / population from PercentPopulationVaccinated;
+
+
+##########################################   CROSS JOIN   ###############################################
+# The CROSS JOIN keyword returns all records from both tables (table1 and table2).
+select tutorial.coviddeathsn.location, tutorial.coviddeathsn.total_cases, tutorial.coviddeathsn.total_deaths, tutorial.covidvaccination.total_vaccinations
+from tutorial.coviddeathsn 
+cross join tutorial.covidvaccination;
+
+############################################ SELF JOIN  #################################################
+select tutorial.coviddeathsn.location, tutorial.coviddeathsn.total_cases, tutorial.coviddeathsn.total_deaths, tutorial.covidvaccination.total_vaccinations
+from tutorial.coviddeathsn 
+cross join tutorial.covidvaccination;
+
