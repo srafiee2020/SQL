@@ -160,8 +160,4 @@ select tutorial.coviddeathsn.location, tutorial.coviddeathsn.total_cases, tutori
 from tutorial.coviddeathsn 
 cross join tutorial.covidvaccination;
 
-############################################ SELF JOIN  #################################################
-select tutorial.coviddeathsn.location, tutorial.coviddeathsn.total_cases, tutorial.coviddeathsn.total_deaths, tutorial.covidvaccination.total_vaccinations
-from tutorial.coviddeathsn 
-cross join tutorial.covidvaccination;
 
